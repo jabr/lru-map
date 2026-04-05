@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["ESNext"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "typeRoots": ["./node_modules"],
+    "types": ["bun-types"]
+  },
+  "include": ["*.ts"]
+}
