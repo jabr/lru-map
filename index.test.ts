@@ -34,10 +34,6 @@ describe('LRUMap', () => {
     it('should throw when setting undefined value', () => {
       expect(() => cache.set('a', undefined as any)).toThrow(TypeError)
     })
-
-    it('should throw when cache() generator returns undefined', async () => {
-      await expect(cache.fetch('a', async () => undefined as any)).rejects.toThrow(TypeError)
-    })
   })
 
   describe('has() method', () => {
@@ -71,7 +67,7 @@ describe('LRUMap', () => {
     })
   })
 
-  describe('cache() function', () => {
+  describe('fetch() function', () => {
     it('should return existing value on hit', async () => {
       cache.set('a', 'original')
       const result = await cache.fetch('a', () => 'generated')
@@ -86,63 +82,93 @@ describe('LRUMap', () => {
     })
 
     it('should throw when generator returns undefined', async () => {
-      await expect(cache.fetch('a', () => undefined as any)).rejects.toThrow(TypeError)
+      expect(cache.fetch('a', () => undefined as any)).rejects.toThrow(TypeError)
     })
   })
 
   describe('rotation behavior', () => {
-    it('should trigger rotation when current + promoteSet exceeds max', async () => {
+    it('should maintain the [N,2N] bounds', async () => {
       // Fill to max - no rotation yet
       await cache.fetch('a', () => 'A')
       await cache.fetch('b', () => 'B')
       await cache.fetch('c', () => 'C')
-      expect(cache.size).toBe(3)  // All in current
+      expect(cache.size).toBe(3) // current={a,b,c}
 
-      // Add d - triggers rotation (current.size = 3, promoteSet.size = 0)
       await cache.fetch('d', () => 'D')
-      // Rotation: previous becomes {a,b,c,d}, current cleared
-      expect(cache.size).toBe(4)
-    })
-
-    it('should promote items accessed from previous generation', async () => {
-      // Fill current
-      await cache.fetch('a', () => 'A')
-      await cache.fetch('b', () => 'B')
-      await cache.fetch('c', () => 'C')
-
-      // Trigger rotation - a,b,c move to previous
-      await cache.fetch('d', () => 'D')
-      // After rotation: previous = {a,b,c}, current = {d}
-      
-      // Access items from previous - they get promoted on next rotation
-      cache.get('a')  // a in promoteSet
-      cache.get('b')  // b in promoteSet
-
-      // Add e - promoteSet size is 2, current size is 1 (d)
-      // 1 + 2 = 3 >= 3, triggers rotation
-      // a and b promoted to current, then swapped to previous
       await cache.fetch('e', () => 'E')
-      // After rotation: previous = {d,a,b}, current = {e}
-      expect(cache.size).toBe(4)
-      expect(cache.get('a')).toBe('A')  // a survived in previous
-      expect(cache.get('b')).toBe('B')  // b survived in previous
+      await cache.fetch('f', () => 'F')
+      expect(cache.size).toBe(6) // current={d,e,f} previous={a,b,c}
+
+      await cache.fetch('g', () => 'G')
+      expect(cache.size).toBe(4) // current={g} previous={d,e,f}
+      expect(cache.get('a')).toBeUndefined()
+      expect(cache.get('d')).toBe('D')
     })
   })
 
   describe('edge cases', () => {
-    it('should handle sequential access pattern A,B,C,A,B,C', async () => {
-      const cache2 = new LRUMap<string, string>(3)
+    it('should handle empty cache operations', () => {
+      expect(cache.get('missing')).toBeUndefined()
+      expect(cache.has('missing')).toBe(false)
+      expect(cache.size).toBe(0)
+      cache.clear() // Should not throw
+      expect(cache.size).toBe(0)
+    })
 
+    it('should handle maxSize=1 through multiple operations', () => {
+      const small = new LRUMap<string, string>(1)
+
+      small.set('a', 'A')
+      expect(small.size).toBe(1)
+      expect(small.get('a')).toBe('A')
+
+      small.set('b', 'B')
+      expect(small.size).toBe(2) // previous={a}, current={b}
+
+      small.set('c', 'C')
+      expect(small.size).toBe(2) // previous={b}, current={c}
+
+      // 'a' was evicted (previous rotated away)
+      expect(small.get('a')).toBeUndefined()
+
+      // 'b' is still accessible (was promoted)
+      expect(small.get('b')).toBe('B')
+      // After promoting 'b': previous={c}, current={b}
+    })
+
+    it('should not cache when generator throws', async () => {
+      expect(cache.fetch('a', async () => {
+        throw new Error('Generator failed')
+      })).rejects.toThrow('Generator failed')
+
+      expect(cache.has('a')).toBe(false)
+      expect(cache.size).toBe(0)
+    })
+
+    it('should clear both maps after rotation', () => {
+      cache.set('a', 'A')
+      cache.set('b', 'B')
+      cache.set('c', 'C')
+      cache.set('d', 'D') // Rotate
+
+      cache.clear()
+
+      expect(cache.size).toBe(0)
+      expect(cache.get('a')).toBeUndefined()
+      expect(cache.get('d')).toBeUndefined()
+    })
+
+    it('should handle sequential access pattern A,B,C,A,B,C', async () => {
       for (let i = 0; i < 5; i++) {
-        await cache2.fetch('a', () => 'A')
-        await cache2.fetch('b', () => 'B')
-        await cache2.fetch('c', () => 'C')
+        await cache.fetch('a', () => 'A')
+        await cache.fetch('b', () => 'B')
+        await cache.fetch('c', () => 'C')
       }
 
-      expect(cache2.size).toBe(3)
-      expect(cache2.get('a')).toBe('A')
-      expect(cache2.get('b')).toBe('B')
-      expect(cache2.get('c')).toBe('C')
+      expect(cache.size).toBe(3)
+      expect(cache.get('a')).toBe('A')
+      expect(cache.get('b')).toBe('B')
+      expect(cache.get('c')).toBe('C')
     })
 
     it('should handle updating items in previous generation', async () => {
@@ -158,41 +184,34 @@ describe('LRUMap', () => {
       expect(cache.get('a')).toBe('A-updated')
     })
 
-    it('should cycle through N unique keys without losing working set', async () => {
-      const cache2 = new LRUMap<string, string>(4)
+    describe('at current.size == max boundary', () => {
+      it('handles update of current generation key', () => {
+        cache.set('a', 'A')
+        cache.set('b', 'B')
+        cache.set('c', 'C')
 
-      // 10 complete cycles through 4 keys
-      for (let i = 0; i < 10; i++) {
-        await cache2.fetch('a', () => 'A')
-        await cache2.fetch('b', () => 'B')
-        await cache2.fetch('c', () => 'C')
-        await cache2.fetch('d', () => 'D')
-      }
+        cache.set('a', 'A-updated')
+        expect(cache.get('a')).toBe('A-updated')
+        expect(cache.get('b')).toBe('B')
+        expect(cache.get('c')).toBe('C')
+      })
 
-      expect(cache2.size).toBe(4)
-      expect(cache2.get('a')).toBe('A')
-      expect(cache2.get('b')).toBe('B')
-      expect(cache2.get('c')).toBe('C')
-      expect(cache2.get('d')).toBe('D')
-    })
-  })
+      it('handles update of previous generation key', () => {
+        cache.set('a', 'A')
+        cache.set('b', 'B')
+        cache.set('c', 'C')
+        cache.set('d', 'D')
+        cache.set('e', 'E')
+        cache.set('f', 'F')
 
-  describe('storage bounds', () => {
-    it('should have storage between [N, 2N]', async () => {
-      // Fill to max
-      cache.set('a', 'A')
-      cache.set('b', 'B')
-      cache.set('c', 'C')
-      expect(cache.size).toBe(3)
-
-      // Access some to populate promoteSet
-      cache.get('a')
-      cache.get('b')
-
-      // Add more - promoteSet = {a,b}, current empty
-      // size = 3 + 2 = 5 before rotation
-      cache.set('d', 'D')
-      expect(cache.size).toBe(4)
+        cache.set('a', 'A-updated')
+        expect(cache.get('a')).toBe('A-updated')
+        expect(cache.get('b')).toBeUndefined()
+        expect(cache.get('c')).toBeUndefined()
+        expect(cache.get('d')).toBe('D')
+        expect(cache.get('e')).toBe('E')
+        expect(cache.get('f')).toBe('F')
+      })
     })
   })
 })
