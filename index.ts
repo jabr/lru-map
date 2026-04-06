@@ -1,5 +1,5 @@
-// Stores references for [0,2*maxSize) most recently stored keys.
-// Similar to hashlru but using Map instead of object.
+// Stores references for [N,2N) most recently stored keys.
+// Inspired by hashlru but using Map instead of object.
 export default class LRUMap<K,V> {
   private current = new Map<K,V>()
   private previous = new Map<K,V>()
@@ -49,10 +49,8 @@ export default class LRUMap<K,V> {
 
   private checkRotation(): void {
     if (this.current.size < this.maxSize) return
-    const swap = this.previous
     this.previous = this.current
-    this.current = swap
-    this.current.clear()
+    this.current = new Map()
   }
 
   get size(): number {
