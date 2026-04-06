@@ -2,7 +2,7 @@
 
 Run with: `bun run benchmark/index.ts --caches all -o 1000000`
 
-All benchmarks: Cache size 1000, Working set 2000, Operations 1,000,000
+All benchmarks: Cache size 1000; Working set 2000-4000; Operations 1,000,000; Run on Bun 1.3.11
 
 ## Summary
 
@@ -58,11 +58,12 @@ mnemonist     13.28M      100.0%
 ```
 
 ### Sequential Distribution (no reuse)
+_Working set increased to 4000 since LRUMap upper-bound is 2N, not 2N-1._
 
 ```
 Cache         Ops/sec    Hit Rate
 ──────────────────────────────────
-LRUMap        1.68M      0.1%
+LRUMap        1.68M      0.0%
 quick-lru     1.54M      0.0%
 hashlru       1.46M      0.0%
 lru.min       1.37M      0.0%

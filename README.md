@@ -1,6 +1,6 @@
 # LRUMap
 
-A fast, simple LRU cache using two Maps with relaxed N to 2N storage bounds. Consistently the fastest JavaScript LRU implementation across all access patterns, including other relaxed N implementations.
+A fast, simple LRU cache using two Maps with relaxed N to 2N storage bounds. Consistently the fastest JavaScript LRU implementation (including other relaxed N implementations) across all benchmarked access patterns.
 
 ## Performance
 
@@ -14,7 +14,7 @@ LRUMap outperforms all popular LRU implementations across realistic workloads:
 | Sequential (streaming) | 1.68M ops/sec | 9% faster |
 | Working-set-shift | 6.29M ops/sec | 1% faster |
 
-All benchmarks run with 1M operations, cache size 1000, working set 2000. See [Benchmarks](benchmark/README.md) for full results.
+See [Benchmarks](benchmark/README.md) for full results.
 
 ## Overview
 

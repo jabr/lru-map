@@ -1,4 +1,4 @@
-// Stores references for [N,2N) most recently stored keys.
+// Stores entries for [N,2N] most recently stored keys.
 // Inspired by hashlru but using Map instead of object.
 export default class LRUMap<K,V> {
   private current = new Map<K,V>()
